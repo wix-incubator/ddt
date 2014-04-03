@@ -36,7 +36,7 @@ class DDT
         $options = $options ? static::$defaults + $options : static::$defaults;
 
         // look for a comma-separated list of alphanumeric strings
-        if (!preg_match('/^[a-zA-Z0-9,]+$/', trim($channels))) {
+        if ($channels && !preg_match('/^[a-zA-Z0-9,]+$/', trim($channels))) {
             return false;
         }
 
