@@ -150,7 +150,7 @@ if (window.postMessage && typeof JSON === 'object' && typeof JSON.parse === 'fun
         }
 
         if (IN_IFRAME && window.parent.ddt && window.parent.ddt.version < version) {
-            ddt.log('ddt', 'syncing channels up to', window.parent.name, 'v' + version);
+            ddt.log('ddt', 'syncing channels up to', String(window.parent.name || window.parent.location), 'v' + version);
             window.parent.postMessage(msg, origin);
         }
     };
@@ -175,7 +175,7 @@ if (window.postMessage && typeof JSON === 'object' && typeof JSON.parse === 'fun
 
         // continue the sync
         util.sync(ddt.version);
-        ddt.log('ddt', 'updated watch list for', window.name, 'to v' + msg.version, ddt.watching());
+        ddt.log('ddt', 'updated watch list for', String(window.name || window.location), 'to v' + msg.version, ddt.watching());
     };
 } else {
     // no postMessage support in this browser, disable sync
