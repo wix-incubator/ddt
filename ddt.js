@@ -1,4 +1,5 @@
 /**
+ * Devious Debugging Tool, v0.2.1
  * Copyright (c) 2013-2014, deviantART, Inc.
  * Licensed under 3-Clause BSD.
  * Refer to the LICENCES.txt file for details.
