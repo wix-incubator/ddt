@@ -1,205 +1,293 @@
-
-/* Copyright 2013, deviantART, Inc.
+/**
+ * Copyright (c) 2013-2014, deviantART, Inc.
  * Licensed under 3-Clause BSD.
  * Refer to the LICENCES.txt file for details.
  * For latest version, see https://github.com/deviantART/ddt
  */
+/* jshint eqeqeq:true, laxcomma:true, laxbreak:true */
 (function(window) {
-    if (!window.console) {
-        return; // DDT will not be useful in this browser
+
+// define constants and private variables
+var  REGEX_ALL_ALPHA = /^[a-zA-Z]+$/
+    ,IN_IFRAME = window.parent !== window
+    ,ddt = window.ddt // capture existing ddt object
+    ,util = {}; // private utility methods
+
+// if ddt was not predefined, create it now
+if (typeof ddt !== 'object') {
+    window.ddt = ddt = {};
+}
+
+// always start at version 1
+ddt.version = 1;
+
+// set any undefined configuration options to defaults
+if (typeof ddt.config !== 'object') {
+    ddt.config = {};
+}
+if (!ddt.config.server) {
+    ddt.config.server = '/ddt/?channels=';
+}
+if (!ddt.config.cookie) {
+    ddt.config.cookie = 'ddt_watch';
+}
+if (!ddt.config.domains) {
+    ddt.config.domains = [window.location.host.split('.').slice(-2).join('.')];
+}
+
+// cookie helpers
+util.cookie = {};
+
+// gets the cookie for the current domain
+// config: ddt.config.cookie
+util.cookie.get =  function() {
+    var  regex  = new RegExp('(?:^|; )' + encodeURIComponent(ddt.config.cookie) + '=([^;]+)')
+        ,result = regex.exec(document.cookie);
+    return result ? String(decodeURIComponent(result[1])).split(',') : [];
+};
+
+// sets the cookie for all domains by loading an image from each domain
+// config: ddt.config.server, ddt.config.domains
+util.cookie.set = function() {
+    var channels = ddt.watching().join(',')
+        ,img
+        ,i;
+    for (i = 0; i < ddt.config.domains.length; i++) {
+        // UDP style, we do absolutely nothing to ensure a successful request
+        img = new Image();
+        img.src = '//' + ddt.config.domains[i] + ddt.config.server + channels;
     }
+    util.sync(++ddt.version);
+};
 
-    // if you change any of these values, make sure to update all the ddt.php files
-    var COOKIE_NAME = 'ddt_watch'
-        ,COOKIE_SETTINGS = ' ;path=/ ;domain=.' + window.location.host.split('.').slice(-2).join('.')
-        ,COOKIE_DOMAINS = [] // add your DDT domains
-        ,DOMAIN_REGEX = new RegExp('^(https?:)?\\/\\/([^.]+\\.)?(' + COOKIE_DOMAINS.join('|').replace('.', '\\.') + ')\\b', 'i')
-        ,IN_IFRAME = window.parent !== window
-        ,watched = {}; // list of packages being watched
-
-    // this cookie is completely unsigned, the only protection it has is the
-    // very limited set of characters that will be accepted by watch/unwatch.
-    var cookie = {
-        get: function() {
-            var regex  = new RegExp('(?:^|; )' + encodeURIComponent(COOKIE_NAME) + '=([^;]+)'),
-                result = regex.exec(document.cookie);
-            return result ? String(decodeURIComponent(result[1])).split(',') : [];
+// deletes the cookie for the current domain
+// config: ddt.config.cookie, ddt.config.domains
+util.cookie.del = function() {
+    var expires = new Date()
+        ,domain = window.location.host
+        ,i;
+    // ensure there is a matching domain to delete
+    for (i = 0; i < ddt.config.domains.length; i++) {
+        // typically the configured domain will be less restrictive, which is
+        // why we search for the configured domain inside the current domain.
+        if (domain.indexOf(ddt.config.domains[i]) !== -1) {
+            // expire 24 hours ago (in ms)
+            expires.setTime(expires.getTime() - 86400000);
+            document.cookie = i = encodeURIComponent(ddt.config.cookie) + '='
+                + '; expires=' + expires.toUTCString()
+                + '; path=/'
+                + '; domain=.' + ddt.config.domains[i];
+            return util.sync(++ddt.version);
         }
-        ,set: function() {
-            var watched_list = [];
-            for (var name in watched) {
-                watched_list.push(name);
-            }
-            var m, channels = watched_list.join(',');
-            for (var i = 0; i < COOKIE_DOMAINS.length; i++) {
-                m = new Image();
-                m.src = '//' + COOKIE_DOMAINS[i] + '/ddt/?channels=' + channels;
-            }
-            cookie.sync(++window.ddt.version);
-        }
-        ,del: function() {
-            var expires = new Date();
-            expires.setTime(expires.getTime() - 86400000); // expire 24 hours ago (in ms)
-            document.cookie = encodeURIComponent(COOKIE_NAME) + '=; expires=' + expires.toUTCString() + COOKIE_SETTINGS;
-            cookie.sync(++window.ddt.version);
-        }
-        ,sync: function() {} // noop is replaced when jQuery loads and postMessage is available
-    };
-
-    if (window.postMessage) {
-        // DDT may load before JQuery, so we continue to poll until it becomes available
-        var waiting = setInterval(function() {
-            if (!window.jQuery) {
-                return; // keep waiting
-            }
-            clearInterval(waiting);
-            // replace cookie.sync noop with real function
-            cookie.sync = function(version) {
-                var msg = JSON.stringify({ddt: true, version: version, channels: watched})
-                    ,origin = '*'
-                    ,$frames = $('iframe[src]');
-
-                $frames.filter(function() {
-                    // only include frames that are part of DDT domains
-                    // and ignore the frame that was sent from
-                    return (DOMAIN_REGEX.test(this.src) && this.contentWindow.ddt && this.contentWindow.ddt.version !== version);
-                });
-
-                if ($frames.length) {
-                    ddt.log('ddt', 'syncing channels down', $frames.length, 'frames found');
-                    $frames.each(function() {
-                        this.contentWindow.postMessage(msg, origin);
-                    });
-                }
-
-                if (IN_IFRAME && window.parent.ddt.version !== version) {
-                    ddt.log('ddt', 'syncing channels up');
-                    window.parent.postMessage(msg, origin);
-                }
-            };
-
-            // add postMessage receive hook
-            $(window).on('message.ddt', function(event) {
-                var msg = event.originalEvent;
-                if (!msg || !msg.data || !msg.origin || !DOMAIN_REGEX.test(msg.origin)) {
-                    return; // not a valid postMessage
-                }
-
-                var data;
-                try {
-                    data = JSON.parse(msg.data);
-                } catch (x) {}
-                if (!data || !data.ddt || !data.version || window.ddt.version === data.version) {
-                    return; // not a DDT postMessage, or already in sync
-                }
-
-                window.ddt.version = data.version; // update version
-                watched = data.channels; // overwrite watched list
-                ddt.log('ddt', 'updated watch list to', 'v' + data.version, 'in', window.name, ddt.watching());
-                cookie.sync(data.version); // continue passing the message
-            });
-        }, 100);
     }
+};
 
-    // generator for proxying to console methods
-    var proxy = function(type) {
-        if (!(type in console)) {
-            console.warn('[ddt] cannot proxy this method, it is not defined in console', type);
+// get a regex that will match all domain URLs
+util.regex = function() {
+    return new RegExp('^(https?:)?\\/\\/([^.]+\\.)?(' + ddt.config.domains.join('|').replace('.', '\\.') + ')\\b', 'i');
+};
+
+// sync helper, uses postMessage to sync changes to watched channels
+// starts as a noop until requirements are checked
+util.sync = function() {};
+
+// console proxy generator
+util.proxy = function(type) {
+    if (!console || !(type in console)) {
+        console.warn('[ddt] cannot proxy this method, it is not defined in console', type);
+        return function() {};
+    }
+    return function(name, message /*, ... */) {
+        var params;
+        if (ddt.watching(name)) {
+            params = Array.prototype.slice.call(arguments, 1);
+            // reformat the message to include the package name
+            params[0] = '[' + name + '] ' + message;
+            console[type].apply(console, params);
         }
-        return function(name, message, extra) {
-            if (name.toLowerCase() in watched) {
-                var params = Array.prototype.slice.call(arguments, 1);
-                // reformat the message to include the package name
-                params[0] = '[' + name + '] ' + message;
-                console[type].apply(console, params);
+    };
+};
+
+// helper for supporting two styles of invocation:
+// func('foo', 'bar', 'baz')
+// func(['foo', 'bar', 'baz'])
+util.args = function(args) {
+    if (!args.length) {
+        return false;
+    }
+    args = Array.prototype.slice.call(args, 0);
+    if (args[0] instanceof Array) {
+        return args[0];
+    }
+    return args;
+};
+
+// helper for warning about invalid package name
+util.warning = function(method, channel) {
+    return console.warn('[ddt] invalid channel name', channel, 'when calling', method);
+};
+
+// attempt to enable postMessage syncing
+if (window.postMessage && typeof JSON === 'object' && typeof JSON.parse === 'function') {
+    util.sync = function(version) {
+        var  msg = JSON.stringify({ddt: true, version: version, channels: ddt.watching()})
+            ,regex_domains = util.regex()
+            ,origin = '*'
+            ,frames = document.getElementsByTagName('iframe')
+            ,frame
+            ,i;
+
+        for (i = 0; i < frames.length; i++) {
+            frame = frames[i];
+            // we only sync to frames that are part of DDT domains
+            if (frame.src && regex_domains.test(frame.src)) {
+                // and only to frames that have DDT loaded
+                if (frame.contentWindow.ddt && frame.contentWindow.ddt.version < version) {
+                    ddt.log('ddt', 'syncing channels down to', frame.src, 'v' + version);
+                    frame.contentWindow.postMessage(msg, origin);
+                }
             }
+        }
+
+        if (IN_IFRAME && window.parent.ddt && window.parent.ddt.version < version) {
+            ddt.log('ddt', 'syncing channels up to', String(window.parent.name || window.parent.location), 'v' + version);
+            window.parent.postMessage(msg, origin);
         }
     };
 
-    window.ddt = {
-        // counter to keep track of the "version" of the channels list
-        // used to keep consistentcy between all frames using postMessage
-        version: 0
+    window.onmessage = function(event) {
+        var  msg = (event || {}).data
+            ,regex_domains = util.regex();
 
-        // set up the ddt -> console proxy methods.
-        ,log: proxy('log')
-        ,info: proxy('info')
-        ,warn: proxy('warn')
-        ,error: proxy('error')
+        if (!msg || !event.origin || !regex_domains.test(event.origin)) {
+            return; // not a valid DDT message
+        }
 
-        ,trace: function(name, message, extra) {
-            if (ddt.watching(name)) {
-                ddt.log.apply(ddt, arguments);
-                console.trace();
-            }
+        try {
+            msg = JSON.parse(msg);
+        } catch (err) { /* ignore */ }
+        if (!msg || !msg.ddt || !msg.version || msg.version <= ddt.version) {
+            return; // not avalid DDT message, or already in sync
         }
-        ,watch: function(name, _bulk) {
-            if (!name) {
-                return false;
-            } else if (name instanceof Array) {
-                for (var p in name) {
-                    window.ddt.watch(name[p], true);
-                }
-                cookie.set();
-            } else {
-                if (!/^[a-zA-Z]+$/.test(name)) {
-                    console.warn('[ddt] attempted to watch invalid package', name);
-                    return false;
-                }
-                watched[name.toLowerCase()] = true;
-                if (!_bulk) {
-                    cookie.set();
-                }
-            }
-            return true;
-        }
-        ,unwatch: function(name, _bulk) {
-            if (!name) {
-                console.warn('[ddt] need a package name');
-                return false;
-            } else if (name instanceof Array) {
-                for (var p in name) {
-                    window.ddt.unwatch(name[p], true);
-                }
-                cookie.set();
-            } else {
-                if (!/^[a-zA-Z]+$/.test(name)) {
-                    console.warn('[ddt] attempted to watch invalid package', name);
-                    return false;
-                }
-                name = name.toLowerCase();
-                if (name in watched) {
-                    delete watched[name];
-                }
-                if (!_bulk) {
-                    cookie.set();
-                }
-            }
-            return true;
-        }
-        ,watching: function(name) {
-            if (name) {
-                return name.toLowerCase() in watched;
-            }
-            var w = [];
-            for (var p in watched) {
-                w.push(p);
-            }
-            return w;
-        }
+
+        ddt.version = msg.version;
+        ddt.reset(msg.channels);
+
+        // continue the sync
+        util.sync(ddt.version);
+        ddt.log('ddt', 'updated watch list for', String(window.name || window.location), 'to v' + msg.version, ddt.watching());
     };
+} else {
+    // no postMessage support in this browser, disable sync
+    console.warn('[ddt] postMessage and/or JSON support not available, sync disabled');
+}
 
-    var saved = cookie.get();
-    if (saved) {
-        if (saved instanceof Array && saved.length) {
-            // this will always refresh the cookie
-            window.ddt.watch(saved);
-            if (!IN_IFRAME) {
-                console.log('[ddt] watching', window.ddt.watching());
+// create DDT within a separate closure to ensure that the watched list is
+// never directly manipulated by any utility method. if multiple DDT instances
+// were allowed, this would be a globally available functional decorator.
+(function() {
+
+// private variables for DDT
+var  watched = {};
+
+// set up the ddt -> console proxy methods.
+ddt.log   = util.proxy('log');
+ddt.info  = util.proxy('info');
+ddt.warn  = util.proxy('warn');
+ddt.error = util.proxy('error');
+
+// proxy trace as log + trace
+ddt.trace = function(name /*, message, ... */) {
+    if (ddt.watching(name)) {
+        ddt.log.apply(ddt, arguments);
+        console.trace();
+    }
+};
+
+ddt.reset = function(names) {
+    var i;
+    names = util.args(arguments);
+    watched = {}; // reset watched list
+    if (!names) {
+        return false;
+    }
+    for (i = 0; i < names.length; i++) {
+        if (REGEX_ALL_ALPHA.test(names[i])) {
+            watched[names[i].toLowerCase()] = true;
+        } else {
+            util.warning(names[i]);
+        }
+    }
+    return true;
+};
+
+// start watching a channel
+ddt.watch = function(names) {
+    var  changed = false
+        ,i;
+    names = util.args(arguments);
+    if (!names) {
+        return false;
+    }
+    for (i = 0; i < names.length; i++) {
+        if (REGEX_ALL_ALPHA.test(names[i])) {
+            watched[names[i].toLowerCase()] = changed = true;
+        } else {
+            util.warning(names[i]);
+        }
+    }
+    if (changed) {
+        util.cookie.set();
+        return true;
+    }
+    return false;
+};
+
+// stop watching a channel
+ddt.unwatch = function(names) {
+    var  changed = false
+        ,name
+        ,i;
+    names = util.args(arguments);
+    if (!names) {
+        return false;
+    }
+    for (i = 0; i < names.length; i++) {
+        if (REGEX_ALL_ALPHA.test(name)) {
+            name = names[i].toLowerCase();
+            if (name in watched) {
+                delete watched[name];
+                changed = true;
             }
         } else {
-            cookie.del();
+            util.warning(names[i]);
         }
     }
+    if (changed) {
+        util.cookie.set();
+        return true;
+    }
+    return false;
+};
+
+// am i watching channel X?
+// or what channels am i watching?
+ddt.watching = function(name) {
+    var watching = [];
+    if (name) {
+        return name.toLowerCase() in watched;
+    }
+    for (name in watched) {
+        watching.push(name);
+    }
+    return watching;
+};
+
+})();
+
+// load saved channels list, if it exists
+if (ddt.reset(util.cookie.get()) && !IN_IFRAME) {
+    console.log('[ddt] watching', ddt.watching());
+}
 
 })(window);

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset=utf-8>
+<title>DDT Example</title>
+</head>
+<body>
+    <h1><a href="https://github.com/deviantART/ddt">DDT</a> Example</h1>
+
+    <noscript>
+    <p><strong>This demo requires Javascript to be enabled.</strong></p>
+    </noscript>
+
+    <form>
+        <p>
+            <input type="text" name="channel" size="40" placeholder="Enter any channel name">
+            <button name="watch" type="submit">Watch</button>
+            <button name="unwatch" type="submit">Unwatch</button>
+        </p>
+        <p class="ddt-watching"><strong>Currently watching:</strong> <span>...</span></p>
+    </form>
+
+    <iframe src="frame.html"></iframe>
+
+    <p>In your web browser console, you can try things like:<br>
+        <tt>ddt.log('ddt', 'this is hidden, unless you watch ddt!')</tt><br>
+        <tt>ddt.watch('ddt')</tt><br>
+        <tt>ddt.info('ddt', 'once you watch the ddt channel, its messages become visible!')</tt>
+    </p>
+
+    <script src="ddt.js"></script>
+    <script src="debug.js"></script>
+    <script>
+    (function() {
+        var  form = document.querySelectorAll('form')[0]
+            ,input = form.querySelectorAll('input[name="channel"]')[0]
+            ,watch = form.querySelectorAll('button[name="watch"]')[0]
+            ,unwatch = form.querySelectorAll('button[name="unwatch"]')[0];
+
+        watch.addEventListener('click', function(e) {
+            e.preventDefault();
+            ddt.watch(input.value);
+            input.value = '';
+        });
+        unwatch.addEventListener('click', function(e) {
+            e.preventDefault();
+            ddt.unwatch(input.value);
+            input.value = '';
+        });
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+        });
+    })();
+    </script>
+</body>
+</html>
