@@ -76,6 +76,16 @@ ddt.unwatch('uploader');
 The same process can be used by creating a "PhoneDebug" namespace, or any other
 name that a developer chooses.
 
+A list of all available channels can be fetched by using the **channels** command.
+This can also be used to watch *all* the channels on the page:
+
+```js
+> ddt.channels();
+["ddt", "uploader"]
+> ddt.watch(ddt.channels());
+true
+```
+
 Also note that internal debugging is done using the "DDT" namespace, which can be
 monitored at any time:
 
