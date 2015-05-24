@@ -1,6 +1,8 @@
 Devious Debugging Tool
 ======================
 
+[![Join the chat at https://gitter.im/DeviantArt/ddt](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/DeviantArt/ddt?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 [DDT][ddt] is a way to add debugging to your Javascript code that can be monitored
 at will by any developer. It acts as a proxy for the standard browser console.
 
