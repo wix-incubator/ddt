@@ -29,8 +29,5 @@
     ],
     "bugs": "https://github.com/deviantART/ddt/issues",
     "homepage": "http://deviantart.github.com/ddt/",
-    "docs": "https://github.com/deviantART/ddt/wiki",
-    "dependencies": {
-        "jquery": ">=1.7"
-    }
+    "docs": "https://github.com/deviantART/ddt/wiki"
 }
